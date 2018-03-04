@@ -1,5 +1,19 @@
 #!/usr/bin/env python
-import keras, tensorflow as tf, numpy as npy, gym, sys, copy, argparse
+from keras import applications
+from keras.preprocessing.image import ImageDataGenerator
+from keras import optimizers
+from keras.models import Sequential, Model, load_model
+from keras.layers import *
+from keras.layers.pooling import GlobalAveragePooling1D
+from keras.callbacks import LearningRateScheduler
+from keras.callbacks import ModelCheckpoint
+import keras.backend as K
+import keras
+import numpy as np 
+import gym
+import sys 
+import copy
+import argparse
 
 class QNetwork():
 
@@ -10,19 +24,49 @@ class QNetwork():
 	def __init__(self, environment_name):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
-		pass
+
+		# Linear DQN
+                env = gym.make(environment_name)
+                env.reset()
+                self.num_actions = env.action_space.n
+                self.state_size = env.observation_space.shape[0]
+                self.model = self.LinearDQN_initialize()
+                del env
 
 	def save_model_weights(self, suffix):
 		# Helper function to save your model / weights. 
-		pass
+                self.model.save(suffix)
 
 	def load_model(self, model_file):
 		# Helper function to load an existing model.
-		pass
+                self.model = load_model(model_file)
 
 	def load_model_weights(self,weight_file):
-		# Helper funciton to load model weights. 
-		pass
+  		# Helper funciton to load model weights. 
+                pass
+
+        def LinearDQN_initialize(self):
+            model = Sequential()
+            print('Input: ' + str(self.state_size))
+            print('Output:'  + str(self.num_actions))
+            model.add(Dense(16, input_dim=self.state_size, activation='relu'))
+            model.add(Dense(16, input_dim=self.state_size, activation='relu'))
+            model.add(Dense(self.num_actions, activation='linear'))
+            model.summary()
+            model.compile(loss='mean_squared_error', optimizer=keras.optimizers.Adam(lr=0.001))
+            return model
+
+        def get_action(self, state):
+            pred_action = self.model.predict(state)
+            return np.argmax(pred_action[0])
+
+        def train(self, state, action, reward, next_state, done, gamma):
+            target = reward
+            if not done:
+                target = (reward + gamma*np.amax(self.model.predict(next_state)[0]))
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)
 
 class Replay_Memory():
 
@@ -57,12 +101,21 @@ class DQN_Agent():
 	# (5) Create a function for Experience Replay.
 	
 	def __init__(self, environment_name, render=False):
-
 		# Create an instance of the network itself, as well as the memory. 
 		# Here is also a good place to set environmental parameters,
-		# as well as training parameters - number of episodes / iterations, etc. 
-
-		pass 
+                self.env = gym.make(environment_name)
+                self.env.reset()
+                self.gamma = float(0.99)
+                self.num_actions = self.env.action_space.n
+                self.state_size = self.env.observation_space.shape[0]
+                self.model = QNetwork(environment_name) 
+                self.num_iterations = 1000000
+                self.num_episodes = 5000
+                self.train_type = 'linear_dqn'
+                self.batch_size = 1
+                self.eps = 1
+                self.eps_decay_fact = 0.99
+                self.eps_steps = 500
 
 	def epsilon_greedy_policy(self, q_values):
 		# Creating epsilon greedy probabilities to sample from.             
@@ -76,14 +129,45 @@ class DQN_Agent():
 		# In this function, we will train our network. 
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
-
 		# If you are using a replay memory, you should interact with environment here, and store these 
 		# transitions to memory, while also updating your model.
-		pass
-
+                if self.train_type == 'linear_dqn':
+                    for given_episode in range(0, self.num_episodes):
+                        print('Train episode: ' +str(given_episode))
+                        state = self.env.reset()
+                        state = np.reshape(state, [self.batch_size, self.state_size])
+                        rand_thresh = 1
+                        for given_iter in range(0, self.num_iterations):
+                           rand_thresh *= self.eps_decay_fact
+                           rand_thresh = max(rand_thresh, 0.1)
+                           rand_num = np.random.uniform(low=0, high=1)
+                           if rand_num < rand_thresh:
+                                action = np.random.randint(0, self.num_actions, 1)[0]
+                           else:
+                                action = self.model.get_action(state)
+                           next_state, reward, done, _ = self.env.step(action)
+                           if done: reward = -200
+                           next_state = np.reshape(next_state, [self.batch_size, self.state_size])
+                           self.model.train(state, action, reward, next_state, done, self.gamma)
+                           state = next_state
+                           if done:
+                               break
 	def test(self, model_file=None):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
-		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
+		# Here you need to interact with the environment, irrespective of whether you are using a memory.
+                avg_reward = 0
+                for given_episode in range(0, 200):
+                    state = self.env.reset()
+                    done = False
+                    total_reward = 0
+                    while done is False:
+                        state = np.reshape(state, [self.batch_size, self.state_size])
+                        action = self.model.get_action(state)
+                        next_state, reward, done, _ = self.env.step(action)
+                        total_reward += reward
+                        state = next_state
+                    avg_reward += total_reward
+                print(float(avg_reward)/float(200))
 
 	def burn_in_memory():
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
@@ -99,20 +183,11 @@ def parse_arguments():
 	return parser.parse_args()
 
 def main(args):
-
 	args = parse_arguments()
 	environment_name = args.env
-
-	# Setting the session to allow growth, so it doesn't allocate all GPU memory. 
-	gpu_ops = tf.GPUOptions(allow_growth=True)
-	config = tf.ConfigProto(gpu_options=gpu_ops)
-	sess = tf.Session(config=config)
-
-	# Setting this as the default tensorflow session. 
-	keras.backend.tensorflow_backend.set_session(sess)
-
-	# You want to create an instance of the DQN_Agent class here, and then train / test it. 
-
+        agent = DQN_Agent(environment_name)
+        agent.train()
+        agent.test()
 if __name__ == '__main__':
 	main(sys.argv)
 
