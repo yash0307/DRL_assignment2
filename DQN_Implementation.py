@@ -76,9 +76,9 @@ class QNetwork():
         targets = rewards
         targets_f = np.zeros((batch_size,2), dtype='float')
         for i in range(0, batch_size):
-            if dones[i] is True:
-                targets[i] = float(rewards[i] + gamma*np.amx(self.model.predict(next_states[i])[0]))
-            targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,4]))
+            if not dones[i]:
+                targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,4]))[0]))
+            targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,4]))[0]
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=1)
 
@@ -210,18 +210,18 @@ class DQN_Agent():
                     next_state = np.reshape(next_state, [1, self.state_size])
                     self.replay_memory.append([state, action, reward, next_state, done])
                     state = next_state
-                    given_batch = self.replay_memory.sample_batch(self.batch_size)
-                    states = np.array([i[0][0] for i in given_batch], dtype='float')
-                    actions = np.array([i[1] for i in given_batch],dtype='int')
-                    rewards = np.array([i[2] for i in given_batch], dtype='float')
-                    next_states = np.array([i[3][0] for i in given_batch], dtype='float')
-                    dones = np.array([i[4] for i in given_batch], dtype='bool')
-                    rewards_final = np.zeros((self.batch_size,1), dtype='float')
-                    for i in range(self.batch_size):
-                        if dones[i]: rewards_final[i] = -200
-                        else: rewards_final[i] = rewards[i]
-                    self.model.train_batch(states, actions, rewards_final, next_states, dones, self.gamma)
                     if done: break
+                given_batch = self.replay_memory.sample_batch(self.batch_size)
+                states = np.array([i[0][0] for i in given_batch], dtype='float')
+                actions = np.array([i[1] for i in given_batch],dtype='int')
+                rewards = np.array([i[2] for i in given_batch], dtype='float')
+                next_states = np.array([i[3][0] for i in given_batch], dtype='float')
+                dones = np.array([i[4] for i in given_batch], dtype='bool')
+                rewards_final = np.zeros((self.batch_size,1), dtype='float')
+                #for i in range(self.batch_size):
+                #    if dones[i]: rewards_final[i] = -200
+                #    else: rewards_final[i] = rewards[i]
+                self.model.train_batch(states, actions, rewards_final, next_states, dones, self.gamma)
 
     def test(self, model_file=None):
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
