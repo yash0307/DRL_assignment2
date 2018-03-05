@@ -109,14 +109,25 @@ class Replay_Memory():
             for e in range(self.burn_in):
                 state = self.env.reset()
                 state = np.reshape(state, [1, state_size])
-                action_prob = np.ones((self.env.action_space.n, 1), dtype='float')[:,0]
+                action_prob = np.array([1,0,1], dtype='float')
                 action_prob = action_prob/np.sum(action_prob)
                 set_actions = range(0, self.env.action_space.n)
                 for given_iter in range(self.num_iterations):
                     action = np.random.choice(set_actions, size=1, replace=False, p=action_prob)[0]
-                    action_prob[action] += 1
+                    if action != 1:
+                        if action == 0 and given_iter%20 == 0:
+                            action_prob[2] = 100
+                            action_prob[0] = 1
+                        if action == 2 and given_iter%20 == 0:
+                            action_prob[2] = 1
+                            action_prob[0] = 100
+                        if action == 0 and given_iter%20 != 0:
+                            action_prob[0] *= 2
+                        if action == 2 and given_iter%20 != 0:
+                            action_prob[2] *= 2
                     action_prob = action_prob / np.sum(action_prob)
                     next_state, reward, done, _ = self.env.step(action)
+                    if next_state[0] >= float(0.5) : print('REACHED GOAL !!')
                     next_state = np.reshape(next_state, [1, state_size])
                     self.append([state, action, reward, next_state, done])
                     state = next_state
@@ -144,8 +155,8 @@ class DQN_Agent():
         if self.train_type == 'use_replay_memory':
             self.batch_size = 32
             self.replay_memory = self.burn_in_memory()
-            self.eps = 0.75
-            self.eps_decay_fact = 0.90
+            self.eps = 0.5
+            self.eps_decay_fact = 0.75
         if self.train_type == 'no_replay_memory':
             self.eps = 1
             self.eps_decay_fact = 0.99
@@ -159,7 +170,7 @@ class DQN_Agent():
         self.state_size = self.env.observation_space.shape[0]
         self.model = QNetwork(environment_name, self.model_type)
         self.num_iterations = 1000000
-        self.num_episodes = 1000
+        self.num_episodes = 2000
 
     def epsilon_greedy_policy(self, q_values):
         pass
