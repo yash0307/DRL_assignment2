@@ -18,15 +18,9 @@ from collections import deque
 import random
 
 class QNetwork():
-    # This class essentially defines the network architecture.
-    # The network should take in state of the world as an input,
-    # and output Q values of the actions available to the agent as the output.
 
     def __init__(self, environment_name, model_type):
-        # Define your network architecture here. It is also a good idea to define any training operations
-        # and optimizers here, initialize your variables, or alternately compile your model here.
 
-        # Linear DQN
         env = gym.make(environment_name)
         env.reset()
         self.num_actions = env.action_space.n
@@ -35,15 +29,12 @@ class QNetwork():
         del env
 
     def save_model_weights(self, suffix):
-        # Helper function to save your model / weights.
         self.model.save(suffix)
 
     def load_model(self, model_file):
-        # Helper function to load an existing model.
         self.model = load_model(model_file)
 
     def load_model_weights(self, weight_file):
-        # Helper funciton to load model weights.
         pass
 
     def LinearDQN_initialize(self, model_type):
@@ -74,22 +65,16 @@ class QNetwork():
     def train_batch(self, states, actions, rewards, next_states, dones, gamma):
         batch_size = states.shape[0]
         targets = rewards
-        targets_f = np.zeros((batch_size,2), dtype='float')
+        targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
         for i in range(0, batch_size):
             if not dones[i]:
-                targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,4]))[0]))
-            targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,4]))[0]
+                targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,self.state_size]))[0]))
+            targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,self.state_size]))[0]
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=1)
 
 class Replay_Memory():
     def __init__(self, env, batch_size, memory_size=50000, burn_in=10000):
-        # The memory essentially stores transitions recorder from the agent
-        # taking actions in the environment.
-
-        # Burn in episodes define the number of episodes that are written into the memory from the
-        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced.
-        # A simple (if not the most efficient) was to implement the memory is as a list of transitions.
         self.memory = deque(maxlen=memory_size)
         self.memory_size = memory_size
         self.burn_in = burn_in
@@ -97,80 +82,93 @@ class Replay_Memory():
         self.env = env
         self.batch_size = batch_size
 
-    def fill_random_transitions(self):
-        random_transition_counter = 0
-        num_actions = self.env.action_space.n
-        state_size = self.env.observation_space.shape[0]
-        for e in range(self.burn_in):
-            state = self.env.reset()
-            state = np.reshape(state, [1,state_size])
-            for given_iter in range(self.num_iterations):
-                action = np.random.randint(0, num_actions, 1)[0]
-                next_state, reward, done, _ = self.env.step(action)
-                next_state = np.reshape(next_state, [1, state_size])
-                self.append([state, action, reward, next_state, done])
-                state = next_state
-                random_transition_counter += 1
-                if done:
-                    break
-                if random_transition_counter > self.memory_size:
-	            return
+    def fill_random_transitions(self, env_name):
+        if env_name == 'CartPole-v0':
+            random_transition_counter = 0
+            num_actions = self.env.action_space.n
+            state_size = self.env.observation_space.shape[0]
+            for e in range(self.burn_in):
+                state = self.env.reset()
+                state = np.reshape(state, [1,state_size])
+                for given_iter in range(self.num_iterations):
+                    action = np.random.randint(0, num_actions, 1)[0]
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = np.reshape(next_state, [1, state_size])
+                    self.append([state, action, reward, next_state, done])
+                    state = next_state
+                    random_transition_counter += 1
+                    if done:
+                        break
+                    if random_transition_counter > self.memory_size:
+	                return
 
+        elif env_name == 'MountainCar-v0':
+            random_transition_counter = 0
+            num_actions = self.env.action_space.n
+            state_size = self.env.observation_space.shape[0]
+            for e in range(self.burn_in):
+                state = self.env.reset()
+                state = np.reshape(state, [1, state_size])
+                action_prob = np.ones((self.env.action_space.n, 1), dtype='float')[:,0]
+                action_prob = action_prob/np.sum(action_prob)
+                set_actions = range(0, self.env.action_space.n)
+                for given_iter in range(self.num_iterations):
+                    action = np.random.choice(set_actions, size=1, replace=False, p=action_prob)[0]
+                    action_prob[action] += 1
+                    action_prob = action_prob / np.sum(action_prob)
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = np.reshape(next_state, [1, state_size])
+                    self.append([state, action, reward, next_state, done])
+                    state = next_state
+                    random_transition_counter += 1
+                    if done:
+                        break
+                    if random_transition_counter > self.memory_size:
+                        return
+             
     def sample_batch(self, batch_size=32):
-        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples.
-        # You will feed this to your model to train.
         mini_batch = random.sample(self.memory, batch_size)
         return mini_batch
 
     def append(self, transition):
-        # Appends transition to the memory.
         self.memory.append(transition)
 
 
 class DQN_Agent():
-    # In this class, we will implement functions to do the following.
-    # (1) Create an instance of the Q Network class.
-    # (2) Create a function that constructs a policy from the Q values predicted by the Q Network.
-    #		(a) Epsilon Greedy Policy.
-    # 		(b) Greedy Policy.
-    # (3) Create a function to train the Q Network, by interacting with the environment.
-    # (4) Create a function to test the Q Network's performance on the environment.
-    # (5) Create a function for Experience Replay.
 
     def __init__(self, environment_name, render=False):
-        # Create an instance of the network itself, as well as the memory.
-        # Here is also a good place to set environmental parameters,
+        self.env_name = environment_name
         self.train_type = 'use_replay_memory'
         self.env = gym.make(environment_name)
         self.env.reset()
-        self.batch_size = 1
         if self.train_type == 'use_replay_memory':
+            self.batch_size = 32
             self.replay_memory = self.burn_in_memory()
+            self.eps = 0.75
+            self.eps_decay_fact = 0.90
+        if self.train_type == 'no_replay_memory':
+            self.eps = 1
+            self.eps_decay_fact = 0.99
+            self.batch_size = 1
         self.model_type = 'dqn'
-        self.gamma = float(0.99)
+        if environment_name == 'CartPole-v0':
+            self.gamma = float(0.99)
+        if environment_name == 'MountainCar-v0':
+            self.gamma = float(1)
         self.num_actions = self.env.action_space.n
         self.state_size = self.env.observation_space.shape[0]
         self.model = QNetwork(environment_name, self.model_type)
         self.num_iterations = 1000000
-        self.num_episodes = 2000
-        self.eps = 1
-        self.eps_decay_fact = 0.99
-        self.eps_steps = 500
+        self.num_episodes = 1000
 
     def epsilon_greedy_policy(self, q_values):
-        # Creating epsilon greedy probabilities to sample from.
         pass
 
     def greedy_policy(self, q_values):
-        # Creating greedy policy for test time.
         pass
 
     def train(self):
-        # In this function, we will train our network.
-        # If training without experience replay_memory, then you will interact with the environment
-        # in this function, while also updating your network parameters.
-        # If you are using a replay memory, you should interact with environment here, and store these
-        # transitions to memory, while also updating your model.
+
         if self.train_type == 'no_replay_memory':
             for given_episode in range(0, self.num_episodes):
                 print('Train episode: ' + str(given_episode))
@@ -186,12 +184,12 @@ class DQN_Agent():
                     else:
                         action = self.model.get_action(state)
                     next_state, reward, done, _ = self.env.step(action)
-                    if done: reward = -200
                     next_state = np.reshape(next_state, [1, self.state_size])
                     self.model.train(state, action, reward, next_state, done, self.gamma)
                     state = next_state
                     if done:
                         break
+
         if self.train_type == 'use_replay_memory':
             for given_episode in range(0, self.num_episodes):
                 print('Train episode: ' + str(given_episode))
@@ -218,14 +216,9 @@ class DQN_Agent():
                 next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                 dones = np.array([i[4] for i in given_batch], dtype='bool')
                 rewards_final = np.zeros((self.batch_size,1), dtype='float')
-                #for i in range(self.batch_size):
-                #    if dones[i]: rewards_final[i] = -200
-                #    else: rewards_final[i] = rewards[i]
                 self.model.train_batch(states, actions, rewards_final, next_states, dones, self.gamma)
 
     def test(self, model_file=None):
-        # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
-        # Here you need to interact with the environment, irrespective of whether you are using a memory.
         avg_reward = 0
         for given_episode in range(0, 200):
             state = self.env.reset()
@@ -241,9 +234,8 @@ class DQN_Agent():
         print(float(avg_reward) / float(200))
 
     def burn_in_memory(self):
-        # Initialize your replay memory with a burn_in number of episodes / transitions.
         memory = Replay_Memory(self.env, self.batch_size)
-        memory.fill_random_transitions()
+        memory.fill_random_transitions(self.env_name)
         return memory
 
 
