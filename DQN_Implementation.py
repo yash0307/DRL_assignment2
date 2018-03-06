@@ -70,7 +70,7 @@ class QNetwork():
             target = (reward + gamma * np.amax(self.model.predict(next_state)[0]))
         target_f = self.model.predict(state)
         target_f[0][action] = target
-        self.model.fit(state, target_f, epochs=1, verbose=1)
+        self.model.fit(state, target_f, epochs=1, verbose=0)
 
     def train_batch(self, states, actions, rewards, next_states, dones, gamma):
         batch_size = states.shape[0]
@@ -81,10 +81,10 @@ class QNetwork():
                 targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,self.state_size]))[0]))
             targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,self.state_size]))[0]
             targets_f[i][int(actions[i])] = targets[i]
-        self.model.fit(states, targets_f, epochs=1, verbose=1)
+        self.model.fit(states, targets_f, epochs=1, verbose=0)
 
 class Replay_Memory():
-    def __init__(self, env, batch_size, memory_size=50000, burn_in=10000):
+    def __init__(self, env, batch_size, memory_size=32, burn_in=10000):
         self.memory = deque(maxlen=memory_size)
         self.memory_size = memory_size
         self.burn_in = burn_in
@@ -153,19 +153,18 @@ class Replay_Memory():
     def append(self, transition):
         self.memory.append(transition)
 
-
 class DQN_Agent():
 
     def __init__(self, environment_name, render=False):
         self.env_name = environment_name
-        self.train_type = 'no_replay_memory'
+        self.train_type = 'use_replay_memory'
         self.env = gym.make(environment_name)
         self.env.reset()
         if self.train_type == 'use_replay_memory':
             self.batch_size = 32
             self.replay_memory = self.burn_in_memory()
-            self.eps = 0.5
-            self.eps_decay_fact = 0.75
+            self.eps = 1
+            self.eps_decay_fact = 0.99
         if self.train_type == 'no_replay_memory':
             self.eps = 1
             self.eps_decay_fact = 0.99
@@ -199,13 +198,12 @@ class DQN_Agent():
                     rand_thresh *= self.eps_decay_fact
                     rand_thresh = max(rand_thresh, 0.1)
                     rand_num = np.random.uniform(low=0, high=1)
-                    if rand_num < float(0):
+                    if rand_num < rand_thresh:
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else:
                         action = self.model.get_action(state)
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(next_state, [1, self.state_size])
-                    if done: reward = -200
                     self.model.train(state, action, reward, next_state, done, self.gamma)
                     state = next_state
                     if done:
@@ -221,7 +219,7 @@ class DQN_Agent():
                     rand_thresh *= self.eps_decay_fact
                     rand_thresh = max(rand_thresh, 0.1)
                     rand_num = np.random.uniform(low=0, high=1)
-                    if rand_num < 0:
+                    if rand_num < rand_thresh:
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else: 
                         action = self.model.get_action(state)
@@ -236,8 +234,7 @@ class DQN_Agent():
                 rewards = np.array([i[2] for i in given_batch], dtype='float')
                 next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                 dones = np.array([i[4] for i in given_batch], dtype='bool')
-                final_rewards = np.zeros((self.batch_size,1), dtype='float')
-                self.model.train_batch(states, actions, final_rewards, next_states, dones, self.gamma)
+                self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
 
     def test(self, model_file=None):
         avg_reward = 0
