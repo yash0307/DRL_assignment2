@@ -46,6 +46,16 @@ class QNetwork():
             model.add(Dense(16, input_dim=self.state_size, activation='relu'))
             model.add(Dense(16, input_dim=self.state_size, activation='relu'))
             model.add(Dense(self.num_actions, activation='linear'))
+        if model_type == 'ddqn':
+            input_layer = Input(shape=(self.state_size,))
+            x = Dense(16, activation='relu')(input_layer)
+            state_val = Dense(1, activation='linear')(x)
+            
+            y = Dense(16, activation='relu')(input_layer)
+            y = Dense(16, activation='relu')(y)
+            adv_vals = Dense(self.num_actions, activation='linear')(y)
+            policy = keras.layers.merge([adv_vals, state_val], mode=lambda x: x[0]-K.mean(x[0])+x[1], output_shape = (self.num_actions,))
+            model = Model(input=[input_layer], output=[policy])
         model.summary()
         model.compile(loss='mean_squared_error', optimizer=keras.optimizers.Adam(lr=0.001))
         return model
@@ -60,7 +70,7 @@ class QNetwork():
             target = (reward + gamma * np.amax(self.model.predict(next_state)[0]))
         target_f = self.model.predict(state)
         target_f[0][action] = target
-        self.model.fit(state, target_f, epochs=1, verbose=0)
+        self.model.fit(state, target_f, epochs=1, verbose=1)
 
     def train_batch(self, states, actions, rewards, next_states, dones, gamma):
         batch_size = states.shape[0]
@@ -112,22 +122,21 @@ class Replay_Memory():
                 action_prob = np.array([1,0,1], dtype='float')
                 action_prob = action_prob/np.sum(action_prob)
                 set_actions = range(0, self.env.action_space.n)
+                mod_fact = 40
                 for given_iter in range(self.num_iterations):
                     action = np.random.choice(set_actions, size=1, replace=False, p=action_prob)[0]
-                    if action != 1:
-                        if action == 0 and given_iter%20 == 0:
-                            action_prob[2] = 100
-                            action_prob[0] = 1
-                        if action == 2 and given_iter%20 == 0:
-                            action_prob[2] = 1
-                            action_prob[0] = 100
-                        if action == 0 and given_iter%20 != 0:
-                            action_prob[0] *= 2
-                        if action == 2 and given_iter%20 != 0:
-                            action_prob[2] *= 2
+                    if action == 0 and given_iter%mod_fact == 0:
+                         action_prob[2] = 100
+                         action_prob[0] = 1
+                    if action == 2 and given_iter%mod_fact == 0:
+                         action_prob[2] = 1
+                         action_prob[0] = 100
+                    if action == 0 and given_iter%mod_fact != 0:
+                         action_prob[0] *= 2
+                    if action == 2 and given_iter%mod_fact != 0:
+                         action_prob[2] *= 2
                     action_prob = action_prob / np.sum(action_prob)
                     next_state, reward, done, _ = self.env.step(action)
-                    if next_state[0] >= float(0.5) : print('REACHED GOAL !!')
                     next_state = np.reshape(next_state, [1, state_size])
                     self.append([state, action, reward, next_state, done])
                     state = next_state
@@ -149,7 +158,7 @@ class DQN_Agent():
 
     def __init__(self, environment_name, render=False):
         self.env_name = environment_name
-        self.train_type = 'use_replay_memory'
+        self.train_type = 'no_replay_memory'
         self.env = gym.make(environment_name)
         self.env.reset()
         if self.train_type == 'use_replay_memory':
@@ -190,12 +199,13 @@ class DQN_Agent():
                     rand_thresh *= self.eps_decay_fact
                     rand_thresh = max(rand_thresh, 0.1)
                     rand_num = np.random.uniform(low=0, high=1)
-                    if rand_num < rand_thresh:
+                    if rand_num < float(0):
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else:
                         action = self.model.get_action(state)
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(next_state, [1, self.state_size])
+                    if done: reward = -200
                     self.model.train(state, action, reward, next_state, done, self.gamma)
                     state = next_state
                     if done:
@@ -211,7 +221,7 @@ class DQN_Agent():
                     rand_thresh *= self.eps_decay_fact
                     rand_thresh = max(rand_thresh, 0.1)
                     rand_num = np.random.uniform(low=0, high=1)
-                    if rand_num < rand_thresh:
+                    if rand_num < 0:
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else: 
                         action = self.model.get_action(state)
@@ -226,8 +236,8 @@ class DQN_Agent():
                 rewards = np.array([i[2] for i in given_batch], dtype='float')
                 next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                 dones = np.array([i[4] for i in given_batch], dtype='bool')
-                rewards_final = np.zeros((self.batch_size,1), dtype='float')
-                self.model.train_batch(states, actions, rewards_final, next_states, dones, self.gamma)
+                final_rewards = np.zeros((self.batch_size,1), dtype='float')
+                self.model.train_batch(states, actions, final_rewards, next_states, dones, self.gamma)
 
     def test(self, model_file=None):
         avg_reward = 0
