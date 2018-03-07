@@ -42,11 +42,13 @@ class QNetwork():
         if model_type == 'linear_dqn':
             model = Sequential()
             model.add(Dense(self.num_actions, input_dim=self.state_size))
+
         if model_type == 'dqn':
             model = Sequential()
             model.add(Dense(16, input_dim=self.state_size, activation='relu'))
             model.add(Dense(16, input_dim=self.state_size, activation='relu'))
             model.add(Dense(self.num_actions, activation='linear'))
+
         if model_type == 'ddqn':
             input_layer = Input(shape=(self.state_size,))
             x = Dense(16, activation='relu')(input_layer)
@@ -56,16 +58,31 @@ class QNetwork():
             adv_vals = Dense(self.num_actions, activation='linear')(y)
             policy = keras.layers.merge([adv_vals, state_val], mode=lambda x: x[0]-K.mean(x[0])+x[1], output_shape = (self.num_actions,))
             model = Model(input=[input_layer], output=[policy])
+
         if model_type == 'dqn_space_invaders':
-            model = Sequential()
-            model.add(Conv2D(filters=16, kernel_size=(8, 8), strides=4, input_shape=(None, 84, 84, 4), activation='relu'))
-            model.add(Conv2D(filters=32, kernel_size=(4, 4), strides=2, activation='relu'))
-            model.add(Flatten())
-            model.add(Dense(256, activation='relu'))
-            model.add(Dense(self.num_actions, activation='linear'))
+            inp_layer = Input(shape=(84, 84, 4))
+            x = Conv2D(filters=16, kernel_size=(8, 8), strides=4, activation='relu')(inp_layer)
+            x = Conv2D(filters=32, kernel_size=(4, 4), strides=2, activation='relu')(x)
+            x = Flatten()(x)
+            x = Dense(256, activation='relu')(x)
+            x = Dense(self.num_actions, activation='linear')(x)
+            model = Model(inp_layer, x)
         model.summary()
         model.compile(loss='mean_squared_error', optimizer=keras.optimizers.Adam(lr=0.001))
         return model
+
+    def get_action_image(self, state):
+        state_inp = np.zeros((1, 84, 84, 4), dtype='float')
+        state_inp[0,:,:,:] = state[:,:,:]
+        pred_action = self.model.predict(state_inp)
+        return np.argmax(pred_action[0])
+
+    def get_action_prob(self, state):
+        state_inp = np.zeros((1, 84, 84, 4), dtype='float')
+        state_inp[0,:,:,:] = state[:,:,:]
+        pred_action = self.model.predict(state_inp)[0,:]
+        print(pred_action)
+        return pred_action
 
     def get_action(self, state):
         pred_action = self.model.predict(state)
@@ -88,7 +105,7 @@ class QNetwork():
                 targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,self.state_size]))[0]))
             targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,self.state_size]))[0]
             targets_f[i][int(actions[i])] = targets[i]
-        self.model.fit(states, targets_f, epochs=1, verbose=0)
+        self.model.fit(states, targets_f, epochs=1, verbose=1)
 
     def train_batch_space_invaders(self, states, actions, rewards, next_states, dones, gamma):
         batch_size = states.shape[0]
@@ -96,8 +113,8 @@ class QNetwork():
         targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
         for i in range(0, batch_size):
             if not dones[i]:
-                targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(next_states[i])))
-            targets_f[i][:] = self.model.predict(states[i])
+                targets[i] = float(rewards[i] + gamma*np.amax(self.get_action_prob(next_states[i])))
+            targets_f[i][:] = self.get_action_prob(states[i])
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=0)
 
@@ -164,6 +181,7 @@ class Replay_Memory():
                         break
                     if random_transition_counter > self.memory_size:
                         return
+
         elif env_name == 'SpaceInvaders-v0':
             random_transition_counter = 0
             num_actions = self.env.action_space.n
@@ -231,6 +249,7 @@ class DQN_Agent():
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders'
+            self.train_type = 'use_replay_memory_space_invaders_v0'
         self.num_actions = self.env.action_space.n
         self.state_size = self.env.observation_space.shape[0]
         self.model = QNetwork(environment_name, self.model_type)
@@ -319,8 +338,7 @@ class DQN_Agent():
                     if rand_num < rand_thresh:
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else:
-                        action = self.model.get_action(np.stack(current_states_queue, axis=2))
-
+                        action = self.model.get_action_image(np.stack(current_states_queue, axis=2))
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
                     next_states_queue.append(next_state)
