@@ -28,14 +28,21 @@ class QNetwork():
         self.state_size = env.observation_space.shape[0]
         if environment_name == 'SpaceInvaders-v0':
           self.model_1 = self.LinearDQN_initialize(model_type)
-          self.model_2 = self.LinearDQN_initialize(model_type)
+          self.save_model_weights(self.model_1, 'model_init.h5')
+          self.model_2 = load_model('model_init.h5')
+        else:
+          self.model = self.LinearDQN_initialize(model_type)
         del env
 
-    def save_model_weights(self, suffix):
-        self.model.save(suffix)
+    def checkpoint_swap(self, save_iter):
+        self.model_1 = load_model('model_init.h5')
+        
+    def save_model_weights(self, model, suffix):
+        model.save(suffix)
 
     def load_model(self, model_file):
-        self.model = load_model(model_file)
+        model = load_model(model_file)
+        return model
 
     def load_model_weights(self, weight_file):
         pass
@@ -118,8 +125,7 @@ class QNetwork():
         batch_size = states.shape[0]
         targets = rewards
         targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
-        if model_num == 1: model_target_num = 2
-        elif model_num == 2: model_target_num = 1
+        model_target_num = 1
         for i in range(0, batch_size):
             if not dones[i]:
                 targets[i] = float(rewards[i] + gamma*np.amax(self.get_action_prob(next_states[i], model_target_num)))
@@ -238,7 +244,7 @@ class DQN_Agent():
 
     def __init__(self, environment_name, render=False):
         self.env_name = environment_name
-        self.train_type = 'use_replay_memory_space_invaders_v0'
+        self.train_type = 'use_replay_memory'
         self.env = gym.make(environment_name)
         self.env.reset()
         if self.train_type == 'use_replay_memory':
@@ -255,11 +261,13 @@ class DQN_Agent():
             self.replay_memory = self.burn_in_memory()
             self.eps = 1
             self.eps_decay_fact = 0.99
+            self.train_type = 'use_replay_memory_space_invaders_v0'
         self.model_type = 'dqn'
         if environment_name == 'CartPole-v0':
             self.gamma = float(0.99)
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
+            self.train_type = 'use_replay_memory'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders'
@@ -319,13 +327,13 @@ class DQN_Agent():
                     self.replay_memory.append([state, action, reward, next_state, done])
                     state = next_state
                     if done: break
-                given_batch = self.replay_memory.sample_batch(self.batch_size)
-                states = np.array([i[0][0] for i in given_batch], dtype='float')
-                actions = np.array([i[1] for i in given_batch],dtype='int')
-                rewards = np.array([i[2] for i in given_batch], dtype='float')
-                next_states = np.array([i[3][0] for i in given_batch], dtype='float')
-                dones = np.array([i[4] for i in given_batch], dtype='bool')
-                self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
+                    given_batch = self.replay_memory.sample_batch(self.batch_size)
+                    states = np.array([i[0][0] for i in given_batch], dtype='float')
+                    actions = np.array([i[1] for i in given_batch],dtype='int')
+                    rewards = np.array([i[2] for i in given_batch], dtype='float')
+                    next_states = np.array([i[3][0] for i in given_batch], dtype='float')
+                    dones = np.array([i[4] for i in given_batch], dtype='bool')
+                    self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
 
         if self.train_type == 'use_replay_memory_space_invaders_v0':
             given_batch = self.replay_memory.sample_batch(self.batch_size)
@@ -350,10 +358,7 @@ class DQN_Agent():
                     if rand_num < rand_thresh:
                         action = np.random.randint(0, self.num_actions, 1)[0]
                     else:
-                        if np.random.randint(low=0, high=10, size=1)[0]%2 == 0:
-                            action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 1)
-                        else:
-                            action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 2)
+                        action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 1)
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
                     next_states_queue.append(next_state)
@@ -362,17 +367,16 @@ class DQN_Agent():
                     self.replay_memory.append([current_states, action, reward, next_states, done])
                     current_states_queue = next_states_queue
                     if done: break
-                given_batch = self.replay_memory.sample_batch(self.batch_size)
-                states = np.array([i[0] for i in given_batch], dtype='float')
-                actions = np.array([i[1] for i in given_batch],dtype='int')
-                rewards = np.array([i[2] for i in given_batch], dtype='float')
-                next_states = np.array([i[3] for i in given_batch], dtype='float')
-                dones = np.array([i[4] for i in given_batch], dtype='bool')
-                if int(given_episode/100)%2 == 0:
-                    self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 1)
-                else:
+                    given_batch = self.replay_memory.sample_batch(self.batch_size)
+                    states = np.array([i[0] for i in given_batch], dtype='float')
+                    actions = np.array([i[1] for i in given_batch],dtype='int')
+                    rewards = np.array([i[2] for i in given_batch], dtype='float')
+                    next_states = np.array([i[3] for i in given_batch], dtype='float')
+                    dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 2)
-    
+                self.model.save_model_weights(self.model.model_2, 'model_init.h5')
+                self.model.checkpoint_swap()
+
     def test(self, model_file=None):
         avg_reward = 0
         for given_episode in range(0, 200):
@@ -404,7 +408,7 @@ class DQN_Agent():
                 state = next_state
             next_states_queue = current_states_queue
             for given_iter in range(0, self.num_iterations):
-                action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 1)
+                action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 2)
                 next_state, reward, done, _ = self.env.step(action)
                 next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
                 next_states_queue.append(next_state)
