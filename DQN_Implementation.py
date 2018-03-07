@@ -16,6 +16,7 @@ import copy
 import argparse
 from collections import deque
 import random
+import cv2
 
 class QNetwork():
 
@@ -50,12 +51,18 @@ class QNetwork():
             input_layer = Input(shape=(self.state_size,))
             x = Dense(16, activation='relu')(input_layer)
             state_val = Dense(1, activation='linear')(x)
-            
             y = Dense(16, activation='relu')(input_layer)
             y = Dense(16, activation='relu')(y)
             adv_vals = Dense(self.num_actions, activation='linear')(y)
             policy = keras.layers.merge([adv_vals, state_val], mode=lambda x: x[0]-K.mean(x[0])+x[1], output_shape = (self.num_actions,))
             model = Model(input=[input_layer], output=[policy])
+        if model_type == 'dqn_space_invaders':
+            model = Sequential()
+            model.add(Conv2D(filters=16, kernel_size=(8, 8), strides=4, input_shape=(None, 84, 84, 4), activation='relu'))
+            model.add(Conv2D(filters=32, kernel_size=(4, 4), strides=2, activation='relu'))
+            model.add(Flatten())
+            model.add(Dense(256, activation='relu'))
+            model.add(Dense(self.num_actions, activation='linear'))
         model.summary()
         model.compile(loss='mean_squared_error', optimizer=keras.optimizers.Adam(lr=0.001))
         return model
@@ -83,6 +90,17 @@ class QNetwork():
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=0)
 
+    def train_batch_space_invaders(self, states, actions, rewards, next_states, dones, gamma):
+        batch_size = states.shape[0]
+        targets = rewards
+        targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
+        for i in range(0, batch_size):
+            if not dones[i]:
+                targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(next_states[i])))
+            targets_f[i][:] = self.model.predict(states[i])
+            targets_f[i][int(actions[i])] = targets[i]
+        self.model.fit(states, targets_f, epochs=1, verbose=0)
+
 class Replay_Memory():
     def __init__(self, env, batch_size, memory_size=32, burn_in=10000):
         self.memory = deque(maxlen=memory_size)
@@ -91,6 +109,7 @@ class Replay_Memory():
         self.num_iterations = 1000000
         self.env = env
         self.batch_size = batch_size
+        self.num_frames = 4
 
     def fill_random_transitions(self, env_name):
         if env_name == 'CartPole-v0':
@@ -110,7 +129,7 @@ class Replay_Memory():
                     if done:
                         break
                     if random_transition_counter > self.memory_size:
-	                return
+                        return
 
         elif env_name == 'MountainCar-v0':
             random_transition_counter = 0
@@ -145,7 +164,37 @@ class Replay_Memory():
                         break
                     if random_transition_counter > self.memory_size:
                         return
-             
+        elif env_name == 'SpaceInvaders-v0':
+            random_transition_counter = 0
+            num_actions = self.env.action_space.n
+            for e in range(self.burn_in):
+                state = self.env.reset()
+                state = cv2.resize(cv2.cvtColor(state, cv2.COLOR_RGB2GRAY), (84, 84))
+                current_states_queue = deque(maxlen=4)
+                next_states_queue = deque(maxlen=4)
+                #generate first four states
+                for frame_counter in range(self.num_frames):
+                    current_states_queue.append(state)
+                    action = np.random.randint(0, num_actions, 1)[0]
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                    state = next_state
+                next_states_queue = current_states_queue
+                for given_iter in range(self.num_iterations):
+                    action = np.random.randint(0, num_actions, 1)[0]
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                    next_states_queue.append(next_state)
+                    current_states = np.stack(current_states_queue, axis=2)
+                    next_states = np.stack(next_states_queue, axis=2)
+                    self.append([current_states, action, reward, next_states, done])
+                    random_transition_counter += 1
+                    current_states_queue = next_states_queue
+                    if done:
+                        break
+                    if random_transition_counter > self.memory_size:
+                        return
+
     def sample_batch(self, batch_size=32):
         mini_batch = random.sample(self.memory, batch_size)
         return mini_batch
@@ -157,7 +206,7 @@ class DQN_Agent():
 
     def __init__(self, environment_name, render=False):
         self.env_name = environment_name
-        self.train_type = 'use_replay_memory'
+        self.train_type = 'use_replay_memory_space_invaders_v0'
         self.env = gym.make(environment_name)
         self.env.reset()
         if self.train_type == 'use_replay_memory':
@@ -169,16 +218,25 @@ class DQN_Agent():
             self.eps = 1
             self.eps_decay_fact = 0.99
             self.batch_size = 1
+        if self.train_type == 'use_replay_memory_space_invaders_v0':
+            self.batch_size = 32
+            self.replay_memory = self.burn_in_memory()
+            self.eps = 1
+            self.eps_decay_fact = 0.99
         self.model_type = 'dqn'
         if environment_name == 'CartPole-v0':
             self.gamma = float(0.99)
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
+        if environment_name == 'SpaceInvaders-v0':
+            self.gamma = float(1)
+            self.model_type = 'dqn_space_invaders'
         self.num_actions = self.env.action_space.n
         self.state_size = self.env.observation_space.shape[0]
         self.model = QNetwork(environment_name, self.model_type)
         self.num_iterations = 1000000
         self.num_episodes = 2000
+        self.num_frames = 4
 
     def epsilon_greedy_policy(self, q_values):
         pass
@@ -235,6 +293,49 @@ class DQN_Agent():
                 next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                 dones = np.array([i[4] for i in given_batch], dtype='bool')
                 self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
+
+        if self.train_type == 'use_replay_memory_space_invaders_v0':
+            given_batch = self.replay_memory.sample_batch(self.batch_size)
+            for given_episode in range(0, self.num_episodes):
+                print('Train episode: ' + str(given_episode))
+                state = self.env.reset()
+                state = cv2.resize(cv2.cvtColor(state, cv2.COLOR_RGB2GRAY), (84, 84))
+                current_states_queue = deque(maxlen=4)
+                next_states_queue = deque(maxlen=4)
+                #generate first four states
+                #TODO: We are always taking random action while filling the initial states queue. Should we take actions based on epsilon?
+                for frame_counter in range(self.num_frames):
+                    current_states_queue.append(state)
+                    action = np.random.randint(0, self.num_actions, 1)[0]
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                    state = next_state
+                next_states_queue = current_states_queue
+                rand_thresh = 1
+                for given_iter in range(0, self.num_iterations):
+                    rand_thresh *= self.eps_decay_fact
+                    rand_thresh = max(rand_thresh, 0.1)
+                    rand_num = np.random.uniform(low=0, high=1)
+                    if rand_num < rand_thresh:
+                        action = np.random.randint(0, self.num_actions, 1)[0]
+                    else:
+                        action = self.model.get_action(np.stack(current_states_queue, axis=2))
+
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                    next_states_queue.append(next_state)
+                    current_states = np.stack(current_states_queue, axis=2)
+                    next_states = np.stack(next_states_queue, axis=2)
+                    self.replay_memory.append([current_states, action, reward, next_states, done])
+                    current_states_queue = next_states_queue
+                    if done: break
+                given_batch = self.replay_memory.sample_batch(self.batch_size)
+                states = np.array([i[0] for i in given_batch], dtype='float')
+                actions = np.array([i[1] for i in given_batch],dtype='int')
+                rewards = np.array([i[2] for i in given_batch], dtype='float')
+                next_states = np.array([i[3] for i in given_batch], dtype='float')
+                dones = np.array([i[4] for i in given_batch], dtype='bool')
+                self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma)
 
     def test(self, model_file=None):
         avg_reward = 0
