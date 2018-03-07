@@ -28,23 +28,26 @@ class QNetwork():
         self.state_size = env.observation_space.shape[0]
         if environment_name == 'SpaceInvaders-v0':
           self.model_1 = self.LinearDQN_initialize(model_type)
-          self.save_model_weights(self.model_1, 'model_init.h5')
-          self.model_2 = load_model('model_init.h5')
+          self.save_model_weights(self.model_1, 'model_init_'+environment_name+'.h5')
+          self.model_2 = load_model('model_init_'+environment_name+'.h5')
         elif environment_name == 'MountainCar-v0':
           self.model_1 = self.LinearDQN_initialize(model_type)
-          self.save_model_weights(self.model_1, 'model_init.h5')
-          self.model_2 = load_model('model_init.h5') 
+          self.save_model_weights(self.model_1, 'model_init_'+environment_name+'.h5')
+          self.model_2 = load_model('model_init_'+environment_name+'.h5') 
         else:
           self.model = self.LinearDQN_initialize(model_type)
         del env
 
-    def checkpoint_swap(self):
-        self.model_1 = load_model('model_init.h5')
+    def checkpoint_swap(self, environment_name):
+        print('Reloading model....')
+        self.model_1 = load_model('model_init_'+environment_name+'.h5')
         
     def save_model_weights(self, model, suffix):
+        print('Saving model....')
         model.save(suffix)
 
     def load_model(self, model_file):
+        print('Loading model....')
         model = load_model(model_file)
         return model
 
@@ -280,9 +283,21 @@ class DQN_Agent():
 
     def __init__(self, environment_name, render=False):
         self.env_name = environment_name
-        self.train_type = 'use_replay_memory'
         self.env = gym.make(environment_name)
         self.env.reset()
+        if environment_name == 'CartPole-v0':
+            self.gamma = float(0.99)
+            self.model_type = 'ddqn'
+            self.train_type = 'no_replay_memory'
+        if environment_name == 'MountainCar-v0':
+            self.gamma = float(1)
+            self.train_type = 'use_replay_memory'
+            self.model_type = 'ddqn'
+        if environment_name == 'SpaceInvaders-v0':
+            self.gamma = float(1)
+            self.model_type = 'dqn_space_invaders'
+            self.train_type = 'use_replay_memory_space_invaders_v0'
+            
         if self.train_type == 'use_replay_memory':
             self.batch_size = 32
             self.replay_memory = self.burn_in_memory()
@@ -297,17 +312,6 @@ class DQN_Agent():
             self.replay_memory = self.burn_in_memory()
             self.eps = 1
             self.eps_decay_fact = 0.99
-            self.train_type = 'use_replay_memory_space_invaders_v0'
-        self.model_type = 'dqn'
-        if environment_name == 'CartPole-v0':
-            self.gamma = float(0.99)
-        if environment_name == 'MountainCar-v0':
-            self.gamma = float(1)
-            self.train_type = 'use_replay_memory'
-            self.model_type = 'ddqn'
-        if environment_name == 'SpaceInvaders-v0':
-            self.gamma = float(1)
-            self.model_type = 'dqn_space_invaders'
             self.train_type = 'use_replay_memory_space_invaders_v0'
         self.num_actions = self.env.action_space.n
         self.state_size = self.env.observation_space.shape[0]
@@ -370,8 +374,8 @@ class DQN_Agent():
                     next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                     dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch_dual_model(states, actions, rewards, next_states, dones, self.gamma, model_num=2)
-                self.model.save_model_weights(self.model.model_2, 'model_init.h5')
-                self.model.checkpoint_swap()
+                self.model.save_model_weights(self.model.model_2, 'model_init_'+self.env_name+'.h5')
+                self.model.checkpoint_swap(self.env_name)
 
         elif self.train_type == 'use_replay_memory':
             for given_episode in range(0, self.num_episodes):
@@ -439,8 +443,8 @@ class DQN_Agent():
                     next_states = np.array([i[3] for i in given_batch], dtype='float')
                     dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 2)
-                self.model.save_model_weights(self.model.model_2, 'model_init.h5')
-                self.model.checkpoint_swap()
+                self.model.save_model_weights(self.model.model_2, 'model_init_'+self.env_name+'.h5')
+                self.model.checkpoint_swap(self.env_name)
 
     def test(self, model_file=None):
         avg_reward = 0
@@ -497,7 +501,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
     parser.add_argument('--env', dest='env', type=str)
     parser.add_argument('--render', dest='render', type=int, default=0)
-    parser.add_argument('--train', dest='train', type=int, default=1)
+    parser.add_argument('--train', dest='train', type=str)
     parser.add_argument('--model', dest='model_file', type=str)
     return parser.parse_args()
 
