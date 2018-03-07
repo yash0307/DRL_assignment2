@@ -368,7 +368,7 @@ class DQN_Agent():
                 rewards = np.array([i[2] for i in given_batch], dtype='float')
                 next_states = np.array([i[3] for i in given_batch], dtype='float')
                 dones = np.array([i[4] for i in given_batch], dtype='bool')
-                if (given_episode%100)%2 == 0:
+                if int(given_episode/100)%2 == 0:
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 1)
                 else:
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 2)
