@@ -30,11 +30,15 @@ class QNetwork():
           self.model_1 = self.LinearDQN_initialize(model_type)
           self.save_model_weights(self.model_1, 'model_init.h5')
           self.model_2 = load_model('model_init.h5')
+        elif environment_name == 'MountainCar-v0':
+          self.model_1 = self.LinearDQN_initialize(model_type)
+          self.save_model_weights(self.model_1, 'model_init.h5')
+          self.model_2 = load_model('model_init.h5') 
         else:
           self.model = self.LinearDQN_initialize(model_type)
         del env
 
-    def checkpoint_swap(self, save_iter):
+    def checkpoint_swap(self):
         self.model_1 = load_model('model_init.h5')
         
     def save_model_weights(self, model, suffix):
@@ -89,6 +93,13 @@ class QNetwork():
             pred_action = self.model_2.predict(state_inp)
         return np.argmax(pred_action[0])
 
+    def get_action_dual_model(self, state, model_num):
+        if model_num == 1:
+            pred_action = self.model_1.predict(state)
+        else:
+            pred_action = self.model_2.predict(state)
+        return np.argmax(pred_action[0])
+
     def get_action_prob(self, state, model_num):
         state_inp = np.zeros((1, 84, 84, 4), dtype='float')
         state_inp[0,:,:,:] = state[:,:,:]
@@ -96,6 +107,13 @@ class QNetwork():
             pred_action = self.model_1.predict(state_inp)[0,:]
         else:
             pred_action = self.model_2.predict(state_inp)[0,:]
+        return pred_action
+
+    def get_action_prob_dual_model(self, state, model_num):
+        if model_num == 1:
+            pred_action = self.model_1.predict(state)[0,:]
+        else:
+            pred_action = self.model_2.predict(state)[0,:]
         return pred_action
 
     def get_action(self, state):
@@ -120,6 +138,24 @@ class QNetwork():
             targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,self.state_size]))[0]
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=1)
+
+    def train_batch_dual_model(self, states, actions, rewards, next_states, dones, gamma, model_num):
+        batch_size = states.shape[0]
+        targets = rewards
+        targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
+        model_target_num = 1
+        for i in range(0, batch_size):
+            if not dones[i]:
+                targets[i] = float(rewards[i] + gamma*np.amax(self.get_action_prob_dual_model(np.reshape(next_states[i], [1,self.state_size]), model_target_num)[0]))
+            targets_f[i][:] = self.get_action_prob_dual_model(np.reshape(states[i], [1,self.state_size]), model_target_num)[0]
+            targets_f[i][int(actions[i])] = targets[i]
+        if model_num == 1:
+            self.model_1.fit(states, targets_f, epochs=1, verbose=1)
+        elif model_num == 2:
+            self.model_2.fit(states, targets_f, epochs=1, verbose=1)
+        else:
+            print('UNKNOWN MODEL NUMBER AT TRAIN !')
+            sys.exit(1)
 
     def train_batch_space_invaders(self, states, actions, rewards, next_states, dones, gamma, model_num):
         batch_size = states.shape[0]
@@ -268,6 +304,7 @@ class DQN_Agent():
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
             self.train_type = 'use_replay_memory'
+            self.model_type = 'ddqn'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders'
@@ -307,8 +344,36 @@ class DQN_Agent():
                     state = next_state
                     if done:
                         break
+        elif self.train_type == 'use_replay_memory' and self.env_name == 'MountainCar-v0':
+            for given_episode in range(0, self.num_episodes):
+                print('Train episode: ' + str(given_episode))
+                state = self.env.reset()
+                state = np.reshape(state, [1 , self.state_size])
+                rand_thresh = 1
+                for given_iter in range(0, self.num_iterations):
+                    rand_thresh *= self.eps_decay_fact
+                    rand_thresh = max(rand_thresh, 0.1)
+                    rand_num = np.random.uniform(low=0, high=1)
+                    if rand_num < rand_thresh:
+                        action = np.random.randint(0, self.num_actions, 1)[0]
+                    else:
+                        action = self.model.get_action_dual_model(state, model_num = 1)
+                    next_state, reward, done, _ = self.env.step(action)
+                    next_state = np.reshape(next_state, [1, self.state_size])
+                    self.replay_memory.append([state, action, reward, next_state, done])
+                    state = next_state
+                    if done: break
+                    given_batch = self.replay_memory.sample_batch(self.batch_size)
+                    states = np.array([i[0][0] for i in given_batch], dtype='float')
+                    actions = np.array([i[1] for i in given_batch],dtype='int')
+                    rewards = np.array([i[2] for i in given_batch], dtype='float')
+                    next_states = np.array([i[3][0] for i in given_batch], dtype='float')
+                    dones = np.array([i[4] for i in given_batch], dtype='bool')
+                    self.model.train_batch_dual_model(states, actions, rewards, next_states, dones, self.gamma, model_num=2)
+                self.model.save_model_weights(self.model.model_2, 'model_init.h5')
+                self.model.checkpoint_swap()
 
-        if self.train_type == 'use_replay_memory':
+        elif self.train_type == 'use_replay_memory':
             for given_episode in range(0, self.num_episodes):
                 print('Train episode: ' + str(given_episode))
                 state = self.env.reset()
@@ -335,7 +400,7 @@ class DQN_Agent():
                     dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
 
-        if self.train_type == 'use_replay_memory_space_invaders_v0':
+        elif self.train_type == 'use_replay_memory_space_invaders_v0':
             given_batch = self.replay_memory.sample_batch(self.batch_size)
             for given_episode in range(0, self.num_episodes):
                 print('Train episode: ' + str(given_episode))
