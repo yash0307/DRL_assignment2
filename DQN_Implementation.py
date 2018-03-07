@@ -134,7 +134,7 @@ class QNetwork():
             sys.exit(1)
 
 class Replay_Memory():
-    def __init__(self, env, batch_size, memory_size=32, burn_in=10000):
+    def __init__(self, env, batch_size, memory_size=1000, burn_in=10000):
         self.memory = deque(maxlen=memory_size)
         self.memory_size = memory_size
         self.burn_in = burn_in
@@ -372,7 +372,6 @@ class DQN_Agent():
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 1)
                 else:
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 2)
-            self.model.save_model_weights('model_space.h5')
     
     def test(self, model_file=None):
         avg_reward = 0
@@ -389,6 +388,35 @@ class DQN_Agent():
             avg_reward += total_reward
         print(float(avg_reward) / float(200))
 
+    def test_image(self, model_file=None):
+        avg_reward = 0
+        for given_episode in range(0, 200):
+            given_reward = 0
+            state = self.env.reset()
+            state = cv2.resize(cv2.cvtColor(state, cv2.COLOR_RGB2GRAY), (84, 84))
+            current_states_queue = deque(maxlen=4)
+            next_states_queue = deque(maxlen=4)
+            for frame_counter in range(self.num_frames):
+                current_states_queue.append(state)
+                action = np.random.randint(0, self.num_actions, 1)[0]
+                next_state, reward, done, _ = self.env.step(action)
+                next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                state = next_state
+            next_states_queue = current_states_queue
+            for given_iter in range(0, self.num_iterations):
+                action = self.model.get_action_image(np.stack(current_states_queue, axis=2), model_num = 1)
+                next_state, reward, done, _ = self.env.step(action)
+                next_state = cv2.resize(cv2.cvtColor(next_state, cv2.COLOR_RGB2GRAY), (84, 84))
+                next_states_queue.append(next_state)
+                current_states = np.stack(current_states_queue, axis=2)
+                next_states = np.stack(next_states_queue, axis=2)
+                next_states_queue.append(next_state)
+                current_states = np.stack(current_states_queue, axis=2)
+                given_reward += reward
+                current_states_queue = next_states_queue
+                if done: break
+            avg_reward += given_reward
+        print(float(avg_reward)/float(200))
 
     def burn_in_memory(self):
         memory = Replay_Memory(self.env, self.batch_size)
@@ -410,6 +438,7 @@ def main(args):
     environment_name = args.env
     agent = DQN_Agent(environment_name)
     agent.train()
+    agent.test_image()
 
 
 if __name__ == '__main__':
