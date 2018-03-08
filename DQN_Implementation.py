@@ -140,7 +140,7 @@ class QNetwork():
                 targets[i] = float(rewards[i] + gamma*np.amax(self.model.predict(np.reshape(next_states[i], [1,self.state_size]))[0]))
             targets_f[i][:] = self.model.predict(np.reshape(states[i], [1,self.state_size]))[0]
             targets_f[i][int(actions[i])] = targets[i]
-        self.model.fit(states, targets_f, epochs=1, verbose=1)
+        self.model.fit(states, targets_f, epochs=1, verbose=0)
 
     def train_batch_dual_model(self, states, actions, rewards, next_states, dones, gamma, model_num):
         batch_size = states.shape[0]
@@ -153,9 +153,9 @@ class QNetwork():
             targets_f[i][:] = self.get_action_prob_dual_model(np.reshape(states[i], [1,self.state_size]), model_target_num)[0]
             targets_f[i][int(actions[i])] = targets[i]
         if model_num == 1:
-            self.model_1.fit(states, targets_f, epochs=1, verbose=1)
+            self.model_1.fit(states, targets_f, epochs=1, verbose=0)
         elif model_num == 2:
-            self.model_2.fit(states, targets_f, epochs=1, verbose=1)
+            self.model_2.fit(states, targets_f, epochs=1, verbose=0)
         else:
             print('UNKNOWN MODEL NUMBER AT TRAIN !')
             sys.exit(1)
@@ -171,9 +171,9 @@ class QNetwork():
             targets_f[i][:] = self.get_action_prob(states[i], model_target_num)
             targets_f[i][int(actions[i])] = targets[i]
         if model_num == 1:
-            self.model_1.fit(states, targets_f, epochs=1, verbose=1)
+            self.model_1.fit(states, targets_f, epochs=1, verbose=0)
         elif model_num == 2:
-            self.model_2.fit(states, targets_f, epochs=1, verbose=1)
+            self.model_2.fit(states, targets_f, epochs=1, verbose=0)
         else:
             print('UNKNOWN MODEL NUMBER !')
             sys.exit(1)
@@ -376,6 +376,7 @@ class DQN_Agent():
                     self.model.train_batch_dual_model(states, actions, rewards, next_states, dones, self.gamma, model_num=2)
                 self.model.save_model_weights(self.model.model_2, 'model_init_'+self.env_name+'.h5')
                 self.model.checkpoint_swap(self.env_name)
+                self.test(test_iters=1)
 
         elif self.train_type == 'use_replay_memory':
             for given_episode in range(0, self.num_episodes):
@@ -403,6 +404,7 @@ class DQN_Agent():
                     next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                     dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
+                self.test(test_iters=1)
 
         elif self.train_type == 'use_replay_memory_space_invaders_v0':
             given_batch = self.replay_memory.sample_batch(self.batch_size)
@@ -445,25 +447,26 @@ class DQN_Agent():
                     self.model.train_batch_space_invaders(states, actions, rewards, next_states, dones, self.gamma, model_num = 2)
                 self.model.save_model_weights(self.model.model_2, 'model_init_'+self.env_name+'.h5')
                 self.model.checkpoint_swap(self.env_name)
+                self.test_image(test_iters=1)
 
-    def test(self, model_file=None):
+    def test(self, test_iters, model_file=None):
         avg_reward = 0
-        for given_episode in range(0, 200):
+        for given_episode in range(0, test_iters):
             state = self.env.reset()
             done = False
             total_reward = 0
             while done is False:
                 state = np.reshape(state, [1, self.state_size])
-                action = self.model.get_action(state)
+                action = self.model.get_action_dual_model(state, model_num=2)
                 next_state, reward, done, _ = self.env.step(action)
                 total_reward += reward
                 state = next_state
             avg_reward += total_reward
-        print(float(avg_reward) / float(200))
+        print(float(avg_reward) / float(test_iters))
 
-    def test_image(self, model_file=None):
+    def test_image(self, test_iters, model_file=None):
         avg_reward = 0
-        for given_episode in range(0, 200):
+        for given_episode in range(0, test_iters):
             given_reward = 0
             state = self.env.reset()
             state = cv2.resize(cv2.cvtColor(state, cv2.COLOR_RGB2GRAY), (84, 84))
@@ -489,7 +492,7 @@ class DQN_Agent():
                 current_states_queue = next_states_queue
                 if done: break
             avg_reward += given_reward
-        print(float(avg_reward)/float(200))
+        print(float(avg_reward)/float(test_iters))
 
     def burn_in_memory(self):
         memory = Replay_Memory(self.env, self.batch_size)
@@ -511,7 +514,7 @@ def main(args):
     environment_name = args.env
     agent = DQN_Agent(environment_name)
     agent.train()
-    agent.test_image()
+    agent.test_image(test_iters=200)
 
 
 if __name__ == '__main__':
