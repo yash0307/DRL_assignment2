@@ -188,7 +188,7 @@ class QNetwork():
             sys.exit(1)
 
 class Replay_Memory():
-    def __init__(self, env, batch_size, memory_size=1000, burn_in=10000):
+    def __init__(self, env, batch_size, memory_size=50000, burn_in=10000):
         self.memory = deque(maxlen=memory_size)
         self.memory_size = memory_size
         self.burn_in = burn_in
@@ -224,22 +224,21 @@ class Replay_Memory():
             for e in range(self.burn_in):
                 state = self.env.reset()
                 state = np.reshape(state, [1, state_size])
-                action_prob = np.array([1,0,1], dtype='float')
+                action_prob = np.array([1,1,1], dtype='float')
                 action_prob = action_prob/np.sum(action_prob)
                 set_actions = range(0, self.env.action_space.n)
-                mod_fact = 40
                 for given_iter in range(self.num_iterations):
                     action = np.random.choice(set_actions, size=1, replace=False, p=action_prob)[0]
-                    if action == 0 and given_iter%mod_fact == 0:
-                         action_prob[2] = 100
-                         action_prob[0] = 1
-                    if action == 2 and given_iter%mod_fact == 0:
-                         action_prob[2] = 1
-                         action_prob[0] = 100
-                    if action == 0 and given_iter%mod_fact != 0:
-                         action_prob[0] *= 2
-                    if action == 2 and given_iter%mod_fact != 0:
-                         action_prob[2] *= 2
+                    #if action == 0 and given_iter%mod_fact == 0:
+                    #     action_prob[2] = 100
+                    #     action_prob[0] = 1
+                    #if action == 2 and given_iter%mod_fact == 0:
+                    #     action_prob[2] = 1
+                    #     action_prob[0] = 100
+                    #if action == 0 and given_iter%mod_fact != 0:
+                    #     action_prob[0] *= 2
+                    #if action == 2 and given_iter%mod_fact != 0:
+                    #     action_prob[2] *= 2
                     action_prob = action_prob / np.sum(action_prob)
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(next_state, [1, state_size])
@@ -296,12 +295,12 @@ class DQN_Agent():
         self.env.reset()
         if environment_name == 'CartPole-v0':
             self.gamma = float(0.99)
-            self.model_type = 'dqn'
+            self.model_type = 'ddqn'
             self.train_type = 'use_replay_memory'
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
             self.train_type = 'use_replay_memory'
-            self.model_type = 'dqn'
+            self.model_type = 'ddqn'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders'
@@ -360,6 +359,8 @@ class DQN_Agent():
                         break
 	        if given_episode%100 == 0 and given_episode != 0:
 		    test_rewards[int(given_episode/100)] = self.test_cartpole(test_iters=1)
+		if given_episode%int((self.num_episodes-1)/3) == 0 and given_episode != 0:
+		    self.model.save_model_weights(self.model.model, 'model_'+self.env_name+'_'+str(given_episode)+'.h5')
             print(test_rewards)
 
         elif self.train_type == 'use_replay_memory' and self.env_name == 'MountainCar-v0':
@@ -389,8 +390,8 @@ class DQN_Agent():
                     next_states = np.array([i[3][0] for i in given_batch], dtype='float')
                     dones = np.array([i[4] for i in given_batch], dtype='bool')
                     self.model.train_batch_mountain_car(states, actions, rewards, next_states, dones, self.gamma)
-            if given_episode%100 == 0 and given_episode != 0:
-                test_rewards[int(given_episode/100)] = self.test(test_iters=1)
+                if given_episode%100 == 0 and given_episode != 0:
+                    test_rewards[int(given_episode/100)] = self.test(test_iters=1)
             print(test_rewards)
 
         elif self.train_type == 'use_replay_memory':
@@ -422,6 +423,8 @@ class DQN_Agent():
                     self.model.train_batch(states, actions, rewards, next_states, dones, self.gamma)
                 if given_episode%100 == 0 and given_episode != 0:
 	            test_rewards[int(given_episode/100)] = self.test_cartpole(test_iters=1)
+		if given_episode%int((self.num_episodes-1)/3) == 0 and given_episode != 0:
+		    self.model.save_model_weights(self.model.model, 'model_'+self.env_name+'_'+str(given_episode)+'.h5')
 	    print(test_rewards)
 
         elif self.train_type == 'use_replay_memory_space_invaders_v0':
