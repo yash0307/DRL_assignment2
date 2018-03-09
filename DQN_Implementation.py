@@ -235,6 +235,13 @@ class QNetwork():
             sys.exit(1)
 
 class Replay_Memory():
+    '''
+        This class handles the experience table buffer.
+	Following are the inputs requited to initialize this class:
+	    (1). OpenAI gym environment. This environment is used to take random action and record state, reward, done flags, next state transition values.
+	    (2). Memory size, this is the maximum number of entries a table can hold.
+	    (3). Burn in, maximum number of episodes to fill the table initially.
+    '''
     def __init__(self, env, batch_size, memory_size=50000, burn_in=10000):
         self.memory = deque(maxlen=memory_size)
         self.memory_size = memory_size
@@ -245,6 +252,9 @@ class Replay_Memory():
         self.num_frames = 4
 
     def fill_random_transitions(self, env_name):
+    '''
+        Given an environment name, fill the experience table by taking random actions initially.
+    '''
         if env_name == 'CartPole-v0':
             random_transition_counter = 0
             num_actions = self.env.action_space.n
@@ -276,16 +286,6 @@ class Replay_Memory():
                 set_actions = range(0, self.env.action_space.n)
                 for given_iter in range(self.num_iterations):
                     action = np.random.choice(set_actions, size=1, replace=False, p=action_prob)[0]
-                    #if action == 0 and given_iter%mod_fact == 0:
-                    #     action_prob[2] = 100
-                    #     action_prob[0] = 1
-                    #if action == 2 and given_iter%mod_fact == 0:
-                    #     action_prob[2] = 1
-                    #     action_prob[0] = 100
-                    #if action == 0 and given_iter%mod_fact != 0:
-                    #     action_prob[0] *= 2
-                    #if action == 2 and given_iter%mod_fact != 0:
-                    #     action_prob[2] *= 2
                     action_prob = action_prob / np.sum(action_prob)
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(next_state, [1, state_size])
@@ -328,10 +328,16 @@ class Replay_Memory():
                         return
 
     def sample_batch(self, batch_size=32):
+    '''
+        Given a batch size randomly sample a mini-batch from created table of experiences.
+    '''
         mini_batch = random.sample(self.memory, batch_size)
         return mini_batch
 
     def append(self, transition):
+    '''
+        Given a new transition which consists of states, actions, next states, done flags, rewards add the tranition to experience table
+    '''
         self.memory.append(transition)
 
 class DQN_Agent():
@@ -374,12 +380,6 @@ class DQN_Agent():
         self.num_iterations = 1000000
         self.num_episodes = 2000
         self.num_frames = 4
-
-    def epsilon_greedy_policy(self, q_values):
-        pass
-
-    def greedy_policy(self, q_values):
-        pass
 
     def train(self):
 
@@ -439,6 +439,8 @@ class DQN_Agent():
                     self.model.train_batch_mountain_car(states, actions, rewards, next_states, dones, self.gamma)
                 if given_episode%100 == 0 and given_episode != 0:
                     test_rewards[int(given_episode/100)] = self.test(test_iters=1)
+		if given_episode%int((self.num_episodes-1)/3) == 0 and given_episode != 0:
+		    self.model.save_model_weights(self.model.model, 'model_'+self.env_name+'_'+str(given_episode)+'.h5')
             print(test_rewards)
 
         elif self.train_type == 'use_replay_memory':
