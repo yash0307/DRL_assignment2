@@ -19,9 +19,37 @@ import random
 import cv2
 
 class QNetwork():
-
+    '''
+        This class contains neural network to approximate the Q-function.
+	Following are the inputs requited to initialize this class:
+	    (1). Environment name: this is required because the SpaceInvaders environment uses two models.
+	         (a). First model is the last checkpoint of training model and is used to generate target labels.
+		 (b). Second model is the main model which is being trained.
+            (2). Model type: this parameter takes care of different architecture requirements in the assignments. This variale can be:
+	         (a) "linear_dqn": Single layer linear network with no activations.
+		 (b) "dqn": Multi layer MLP with activations.
+		 (c) "ddqn": Dueling arhcitecture consisting of two branches (state value function, advantage functions).
+	Following are the functionalies included in this class:
+	    (1). Model Class Initialization.
+	    (2). Checkpoint Swap: This is saving the current model as latest checkpoint (used for SpaceInvaders).
+	    (3). Save Model Weights.
+	    (4). Load model from a file.
+	    (5). Model architecture initialization.
+	    (6). Get the action as per trained model if an image is given as input. (Used for SpaceInvaders)
+	    (7). Get the Q(s,a) estimated by model given state as input. (output of network).
+	    (8). Get action as per state parameters. (used for CartPole and MountainCar).
+	    (9). Train the model stochastically if state parameters are given as input (used for CartPole, MountainCar when NO memory replay is used).
+	    (10). Train the model at mini-batch level if state parameters are given as input (used for CartPole when memory replay is used)
+	    (11). Train the model at mini-batch level if state parameters are given as input for MountainCar (as reaching 0.5 is the goal, a saperate function is required for this).
+	    (12). Train the model at mini-batch level if images are given as input (used for SpaceInvaders).
+    '''
     def __init__(self, environment_name, model_type):
-
+        '''
+	    Initialize the class as per input parameters.
+            Parameters:
+	        environment_name (type string): Name of environment to be used. Possible values: 'CartPole-v0', 'MountainCar-v0', 'SpaceInvaders-v0'
+	        model_type (type string): Name of model type to be used. Possible valies: 'linear_dqn', 'dqn', 'ddqn', 'dqn_space_invaders'
+	'''
         env = gym.make(environment_name)
         env.reset()
         self.num_actions = env.action_space.n
@@ -35,22 +63,46 @@ class QNetwork():
         del env
 
     def checkpoint_swap(self, environment_name):
+        '''
+	    Given an environment name save the recent model as checkpoint.
+	    Parameters: 
+	        environment_name (type string): Name of the environment.
+	'''
         print('Reloading model....')
         self.model_1 = load_model('model_init_'+environment_name+'.h5')
         
     def save_model_weights(self, model, suffix):
+        '''
+	    Given a model and string with model name, saves the model weights and defination.
+	    Parameters: 
+	        model (type keras model): Model to be saved.
+		suffix (type string): Output path to which model is to be saved.
+	'''
         print('Saving model....')
         model.save(suffix)
 
     def load_model(self, model_file):
+        '''
+	    Given a model file name, loads the model and returns it.
+	    Parameters: 
+	        model_file (type string): Path of model file to be loaded.
+	'''
         print('Loading model....')
         model = load_model(model_file)
         return model
 
     def load_model_weights(self, weight_file):
+        '''
+	    This function is not used anywhere because both model defination and weights are saved as a .h5 file by keras.
+	'''
         pass
 
     def LinearDQN_initialize(self, model_type):
+        '''
+	    Given the type of model. This function initializes the model architecture.
+	    Parameters:
+	        model_type (type string): Specifies what model to initialize.
+	'''
         if model_type == 'linear_dqn':
             model = Sequential()
             model.add(Dense(self.num_actions, input_dim=self.state_size))
@@ -84,6 +136,11 @@ class QNetwork():
         return model
 
     def get_action_image(self, state, model_num):
+        '''
+	    Given a state in form of image and model number (two models are used for SpaceInvaders), return the optimal action as per model.           Parameters:
+	        state (type numpy matrix): contains 4 consecutive video frames.
+		model_num (type int): model number from which action has to be taken (two models for SpaceInvaders).
+	'''
         state_inp = np.zeros((1, 84, 84, 4), dtype='float')
         state_inp[0,:,:,:] = state[:,:,:]
         if model_num == 1:
@@ -92,14 +149,12 @@ class QNetwork():
             pred_action = self.model_2.predict(state_inp)
         return np.argmax(pred_action[0])
 
-    def get_action_dual_model(self, state, model_num):
-        if model_num == 1:
-            pred_action = self.model_1.predict(state)
-        else:
-            pred_action = self.model_2.predict(state)
-        return np.argmax(pred_action[0])
-
     def get_action_prob(self, state, model_num):
+        '''
+	    Given a state in form of image and model number (two models are used for SpaceInvaders), return the value function for each action .       Parameters:
+	        state (type numpy matrix): contains 4 consecutive video frames.
+		model_num (type int): model number from which action probability has to be generated (two models for SpaceInvaders).
+	'''
         state_inp = np.zeros((1, 84, 84, 4), dtype='float')
         state_inp[0,:,:,:] = state[:,:,:]
         if model_num == 1:
@@ -108,18 +163,19 @@ class QNetwork():
             pred_action = self.model_2.predict(state_inp)[0,:]
         return pred_action
 
-    def get_action_prob_dual_model(self, state, model_num):
-        if model_num == 1:
-            pred_action = self.model_1.predict(state)[0,:]
-        else:
-            pred_action = self.model_2.predict(state)[0,:]
-        return pred_action
-
     def get_action(self, state):
+        '''
+	    Given a state in form of state varialbes, returns the optimal action as per current model.
+	    Parameters:
+	        state (type numpy array): contains array of size as number of environment state variables.
+	'''
         pred_action = self.model.predict(state)
         return np.argmax(pred_action[0])
 
     def train(self, state, action, reward, next_state, done, gamma):
+        '''
+	    Given a state, action, reward, next_state and done flag train the model stochastically for given input.
+	'''
         target = reward
         if not done:
             target = (reward + gamma * np.amax(self.model.predict(next_state)[0]))
@@ -128,6 +184,9 @@ class QNetwork():
         self.model.fit(state, target_f, epochs=1, verbose=0)
 
     def train_batch(self, states, actions, rewards, next_states, dones, gamma):
+        '''
+	    Given sampled states, actions, rewards, next_states and done flags train the model at mini-batch level for given input.
+	'''
         batch_size = states.shape[0]
         targets = rewards
         targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
@@ -138,25 +197,10 @@ class QNetwork():
             targets_f[i][int(actions[i])] = targets[i]
         self.model.fit(states, targets_f, epochs=1, verbose=0)
 
-    def train_batch_dual_model(self, states, actions, rewards, next_states, dones, gamma, model_num):
-        batch_size = states.shape[0]
-        targets = rewards
-        targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
-        model_target_num = 1
-        for i in range(0, batch_size):
-            if not dones[i]:
-                targets[i] = float(rewards[i] + gamma*np.amax(self.get_action_prob_dual_model(np.reshape(next_states[i], [1,self.state_size]), model_target_num)[0]))
-            targets_f[i][:] = self.get_action_prob_dual_model(np.reshape(states[i], [1,self.state_size]), model_target_num)[0]
-            targets_f[i][int(actions[i])] = targets[i]
-        if model_num == 1:
-            self.model_1.fit(states, targets_f, epochs=1, verbose=0)
-        elif model_num == 2:
-            self.model_2.fit(states, targets_f, epochs=1, verbose=0)
-        else:
-            print('UNKNOWN MODEL NUMBER AT TRAIN !')
-            sys.exit(1)
-
     def train_batch_mountain_car(self, states, actions, rewards, next_states, dones, gamma):
+        '''
+	    Given sampled states, actions, rewards, next_states and done flags train the model for MountainCar at mini-batch level for given input. Note that a different function is required because if height>=0.5, then target label changes.
+	'''
         batch_size = states.shape[0]
 	targets = rewards
 	targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
@@ -170,6 +214,9 @@ class QNetwork():
 	self.model.fit(states, targets_f, epochs=1, verbose=0)
 
     def train_batch_space_invaders(self, states, actions, rewards, next_states, dones, gamma, model_num):
+        '''
+	    Given sampled states, actions, rewards, next_states and done flags train the model for MountainCar at mini-batch level for given input. Here training is done on top of images as input representation of state.
+	'''
         batch_size = states.shape[0]
         targets = rewards
         targets_f = np.zeros((batch_size, self.num_actions), dtype='float')
@@ -300,7 +347,7 @@ class DQN_Agent():
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
             self.train_type = 'use_replay_memory'
-            self.model_type = 'ddqn'
+            self.model_type = 'linear_dqn'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders'
