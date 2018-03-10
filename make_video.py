@@ -19,17 +19,17 @@ import cv2
 
 
 
-env = gym.wrappers.Monitor(gym.make('CartPole-v0'), './cartpole_no_exp_dqn', video_callable=lambda episode_id: True)
-env = gym.make('CartPole-v0')
-model = load_model('/home/yash/Sem2/DeepRL/dqn/cartpole/no_replay/model_CartPole-v0_666.h5')
-state = env.reset()
-done = False
-total_reward = 0
-while not done:
-    env.render()
-    state = np.reshape(state, [1, 4])
-    action = np.argmax(model.predict(state)[0])
-    next_state, reward, done, _ = env.step(action)
-    total_reward += reward
-    state = next_state
-print(total_reward)
+env = gym.wrappers.Monitor(gym.make('SpaceInvaders-v0'), './video', video_callable=lambda episode_id: True, force=True)
+model = load_model('/home/yash/Sem2/DeepRL/space/model_init_SpaceInvaders-v0.h5')
+for i in range(10):
+	state = env.reset()
+	done = False
+	total_reward = 0
+	while not done:
+    		env.render()
+    		state = np.reshape(state, [1, 2])
+    		action = np.argmax(model.predict(state)[0])
+    		next_state, reward, done, _ = env.step(action)
+    		total_reward += reward
+    		state = next_state
+	print(total_reward)
