@@ -256,9 +256,9 @@ class Replay_Memory():
         self.num_frames = 4
 
     def fill_random_transitions(self, env_name):
-    '''
-        Given an environment name, fill the experience table by taking random actions initially.
-    '''
+        '''
+            Given an environment name, fill the experience table by taking random actions initially.
+        '''
         if env_name == 'CartPole-v0':
             random_transition_counter = 0
             num_actions = self.env.action_space.n
@@ -332,16 +332,16 @@ class Replay_Memory():
                         return
 
     def sample_batch(self, batch_size=32):
-    '''
-        Given a batch size randomly sample a mini-batch from created table of experiences.
-    '''
+        '''
+           Given a batch size randomly sample a mini-batch from created table of experiences.
+        '''
         mini_batch = random.sample(self.memory, batch_size)
         return mini_batch
 
     def append(self, transition):
-    '''
-        Given a new transition which consists of states, actions, next states, done flags, rewards add the tranition to experience table
-    '''
+        '''
+           Given a new transition which consists of states, actions, next states, done flags, rewards add the tranition to experience table
+        '''
         self.memory.append(transition)
 
 class DQN_Agent():
@@ -360,9 +360,9 @@ class DQN_Agent():
 	    (2). When not using memory reply we make updates to network in stochastic fashion that is one input at a time (not batches).
     '''
     def __init__(self, environment_name, render=False):
-    '''
-        - If we want to use memory replay. Set "self.train_type='use_replay_memory'", else set is as "self.train_type='no_replay_memory'"
-    '''
+        '''
+           - If we want to use memory replay. Set "self.train_type='use_replay_memory'", else set is as "self.train_type='no_replay_memory'"
+        '''
         self.env_name = environment_name # This can be 'CartPole-v0', 'MountainCar-v0' or 'SpaceInvaders-v0'
         self.env = gym.make(environment_name)
         self.env.reset()
@@ -373,7 +373,7 @@ class DQN_Agent():
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
             self.train_type = 'use_replay_memory' # This can be 'use_replay_memory', 'no_replay_memory'
-            self.model_type = 'linear_dqn' # This can be 'linear_dqn', 'dqn', 'ddqn'
+            self.model_type = 'ddqn' # This can be 'linear_dqn', 'dqn', 'ddqn'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders' # This can be only 'dqn_space_invaders'
@@ -580,9 +580,9 @@ class DQN_Agent():
 	return(float(avg_reward) / float(test_iters))
 
     def test_image(self, test_iters, model_file=None):
-    '''
+        '''
 	    Testing function which runs testing for test_iters number of times and retures the average reward. This is on input images directly . This function is specific to SpaceInvaders environment.
-    '''
+        '''
         avg_reward = 0
         for given_episode in range(0, test_iters):
             given_reward = 0
@@ -613,9 +613,9 @@ class DQN_Agent():
         print(float(avg_reward)/float(test_iters))
 
     def burn_in_memory(self):
-    '''
-        Initialize the experience table initially with random transitions.
-    '''
+        '''
+            Initialize the experience table initially with random transitions.
+        '''
         memory = Replay_Memory(self.env, self.batch_size)
         memory.fill_random_transitions(self.env_name)
         return memory
@@ -645,3 +645,4 @@ def main(args):
 
 if __name__ == '__main__':
     main(sys.argv)
+
