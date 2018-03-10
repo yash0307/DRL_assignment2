@@ -405,31 +405,6 @@ class DQN_Agent():
         '''
 	    With all the agent class paramaters set, this function trains the network.
 	'''
-	if self.train_type == 'no_replay_memory' and self.env_name == 'MountainCar-v0':
-	    test_rewards = np.zeros((int(self.num_episodes/100)+1,1))
-	    rand_thresh = 1
-	    for given_episode in range(0, self.num_episodes):
-	        print('Train episode: ' + str(given_episode))
-		state = self.env.reset()
-		state = np.reshape(state, [1, self.state_size])
-                rand_thresh *= self.eps_decay_fact
-		rand_thresh = max(rand_thresh, 0.1)
-		for given_iter in range(0, self.num_iterations):
-		    rand_num = np.random.uniform(low=0, high=1)
-		    if rand_num < rand_thresh:
-		        action = np.random.randint(0, self.num_actions, 1)[0]
-		    else:
-		        action = self.model.get_action(state)
-		    next_state, reward, done, _ = self.env.step(action)
-                    next_state = np.reshape(next_state, [1, self.state_size])
-		    self.model.train(state, action, reward, next_state, done, self.gamma)
-		    state = next_state
-		    if done: break
-                if given_episode%100 == 0 and given_episode != 0:
-		    test_rewards[int(given_episode/100)] = self.test_cartpole(test_iters=1)
-		if given_episode%int((self.num_episodes-1)/3) == 0 and given_episode != 0:
-		    self.model.save_model_weights(self.model.model, 'model_'+self.env_name+'_'+str(given_episode)+'.h5')
-            print(test_rewards)
         if self.train_type == 'no_replay_memory':
 	    test_rewards = np.zeros((int(self.num_episodes/100)+1,1))
             for given_episode in range(0, self.num_episodes):
