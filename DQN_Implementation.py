@@ -635,7 +635,12 @@ def main(args):
     environment_name = args.env
     agent = DQN_Agent(environment_name)
     agent.train()
-    agent.test_cartpole(test_iters=200)
+    if environment_name == 'CartPole-v0':
+        agent.test_cartpole(test_iters=200)
+    elif environment_name == 'MountainCar-v0':
+        agent.test(test_iters=200)
+    elif environment_name == 'SpaceInvaders-v0':
+        agent.test_image(test_iters=200)
 
 
 if __name__ == '__main__':
