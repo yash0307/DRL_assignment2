@@ -35,22 +35,22 @@ Wheneve replay experience is use. We do the training of network at mini-batch le
 -----------------------------------------------------------------------------------------------------------------------
 Q.3.
 
-Running DQN for CartPole with no experience replay:
+Running Deep Q-Network for CartPole with no experience replay:
 On line 371 set "self.model_type='dqn'"
 On line 372 set "self.train_type='no_replay_memory'"
 python DQN_Implementation.py --env=CartPole-v0
 
-Running DQN for CartPole and with experience replay:
+Running Deep Q-Network for CartPole and with experience replay:
 On line 371 set "self.model_type='dqn'"
 On line 372 set "self.train_type='use_replay_memory'"
 python DQN_Implementation.py --env=CartPole-v0
 
-Running DQN for MountainCar and no experience replay:
+Running Deep Q-Network for MountainCar and no experience replay:
 On line 375 set "self.train_type='no_replay_memory'"
 On line 376 set "self.model_type='dqn'"
 python DQN_Implementation.py --env=MountainCar-v0
 
-Running DQN for MountainCar and no experience replay:
+Running Deep Q-Network for MountainCar and no experience replay:
 On line 375 set "self.train_type='use_replay_memory'"
 On line 376 set "self.model_type='dqn'"
 python DQN_Implementation.py --env=MountainCar-v0
@@ -60,22 +60,22 @@ Whenever replay experience is not used. We do the training of network in a stoch
 -----------------------------------------------------------------------------------------------------------------------
 Q.4.
 
-Running DQN for CartPole with no experience replay:
+Running Dueling DQN for CartPole with no experience replay:
 On line 371 set "self.model_type='ddqn'"
 On line 372 set "self.train_type='no_replay_memory'"
 python DQN_Implementation.py --env=CartPole-v0
 
-Running DQN for CartPole and with experience replay:
+Running Dueling DQN for CartPole and with experience replay:
 On line 371 set "self.model_type='ddqn'"
 On line 372 set "self.train_type='use_replay_memory'"
 python DQN_Implementation.py --env=CartPole-v0
 
-Running DQN for MountainCar and no experience replay:
+Running Dueling DQN for MountainCar and no experience replay:
 On line 375 set "self.train_type='no_replay_memory'"
 On line 376 set "self.model_type='ddqn'"
 python DQN_Implementation.py --env=MountainCar-v0
 
-Running DQN for MountainCar and no experience replay:
+Running Dueling DQN for MountainCar and no experience replay:
 On line 375 set "self.train_type='use_replay_memory'"
 On line 376 set "self.model_type='ddqn'"
 python DQN_Implementation.py --env=MountainCar-v0

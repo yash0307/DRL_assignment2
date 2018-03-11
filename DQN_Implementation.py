@@ -372,8 +372,8 @@ class DQN_Agent():
             self.train_type = 'use_replay_memory' # This can be 'use_replay_memory', 'no_replay_memory'
         if environment_name == 'MountainCar-v0':
             self.gamma = float(1)
-            self.train_type = 'no_replay_memory' # This can be 'use_replay_memory', 'no_replay_memory'
-            self.model_type = 'dqn' # This can be 'linear_dqn', 'dqn', 'ddqn'
+            self.train_type = 'use_replay_memory' # This can be 'use_replay_memory', 'no_replay_memory'
+            self.model_type = 'ddqn' # This can be 'linear_dqn', 'dqn', 'ddqn'
         if environment_name == 'SpaceInvaders-v0':
             self.gamma = float(1)
             self.model_type = 'dqn_space_invaders' # This can be only 'dqn_space_invaders'
